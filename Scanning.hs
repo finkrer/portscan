@@ -11,6 +11,8 @@ import Control.Concurrent.Async
 import Network.Socket hiding (send, sendTo, recv, recvFrom)
 import Network.Socket.ByteString (send, recv)
 import System.Timeout
+import Data.Char
+import Data.Bits
 import qualified Data.ByteString.Char8 as B8
 
 data Protocol = TCP | UDP deriving Show
@@ -64,22 +66,33 @@ check proto host port = withSocketsDo $ do
         handler2 :: IOException -> IO (Maybe ())
         handler2 err = return Nothing
 
+packet :: B8.ByteString
+packet = B8.pack [chr 0x23] 
+    `B8.append` B8.pack (replicate 39 (chr 0))
+    `B8.append` B8.pack (replicate 8 (chr 44))
+
 getResult :: Socket -> IO Result
 getResult sock = do
-    let msg = B8.pack "hi"
-    send sock msg
+    send sock packet
     reply <- withTimeout $ recv sock 1024
     case reply of
         Nothing -> return NoReply
         Just bstr -> return (Reply $ getProtocol bstr)
 
 getProtocol :: B8.ByteString -> ProtoName
-getProtocol bstr
-    | B8.isInfixOf "HTTP" bstr = HTTP
-    | B8.isInfixOf "SSH"  bstr = SSH
-    | B8.isInfixOf "SMTP" bstr = SMTP
-    | B8.isInfixOf "IMAP" bstr = IMAP
-    | B8.isInfixOf "POP3" bstr = POP3
+getProtocol reply
+    | B8.isInfixOf "HTTP" reply = HTTP
+    | B8.isInfixOf "SSH"  reply = SSH
+    | B8.isInfixOf "SMTP" reply = SMTP
+    | B8.isInfixOf "IMAP" reply = IMAP
+    | B8.isInfixOf "POP3" reply = POP3
+    | B8.take 2 reply == B8.take 2 packet 
+        && ord (B8.index reply 3) .&. 1 == 1
+        = DNS
+    | ord (B8.index reply 0) .&. 7 == 4 
+        && ord (B8.index reply 0) `shift` (-3) .&. 7 == 3 
+        && B8.take 8 (B8.drop 24 reply) == B8.take 8 (B8.drop 40 packet)
+        = NTP
     | otherwise = Unknown
 
 displayResult :: Protocol -> Int -> Result -> IO ()
