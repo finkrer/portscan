@@ -34,12 +34,13 @@ data Result = Reply ProtoName
 withTimeout :: IO a -> IO (Maybe a)
 withTimeout = timeout $ 200 * 1000
 
-scan :: Protocol -> HostName -> Int -> Int -> IO ()
-scan proto host from to = do
+scan :: Protocol -> HostName -> Int -> Int -> Int -> IO ()
+scan proto host from to threads = do
+    caps <- getNumCapabilities
     let length = to - from + 1
-    cpus <- getNumCapabilities
+    let cpus = caps * threads `min` length `min` 256
     let positions = [from,from+cpus..to]
-    forConcurrently_ [1..cpus] (\thread ->
+    forConcurrently_ [0..cpus-1] (\thread ->
         forM_ positions (\pos ->
             check proto host (pos+thread) >>= displayResult proto (pos+thread)))
 

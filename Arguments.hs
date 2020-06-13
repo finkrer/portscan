@@ -9,7 +9,8 @@ data Args = Args
   , from    :: Int
   , to      :: Int
   , scanTCP :: Bool
-  , scanUDP :: Bool }
+  , scanUDP :: Bool
+  , threadsPerCPU :: Int }
 
 args :: Parser Args
 args = Args
@@ -22,6 +23,12 @@ args = Args
     <*> switch
         ( short 'u'
         <> help "Scan UDP ports" )
+    <*> option auto
+        ( long "threads"
+        <> metavar "N"
+        <> help "Threads per CPU. High values may cause your machine to halt and catch fire."
+        <> value 32
+        <> showDefault )
 
 opts :: ParserInfo Args
 opts = info (args <**> helper)

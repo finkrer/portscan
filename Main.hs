@@ -10,6 +10,6 @@ main = getArgs >>= run
 
 run :: Args -> IO ()
 run Args{..} = do
-        if scanTCP then scan TCP host from to else return ()
-        if scanUDP then scan UDP host from to else return ()
+        if scanTCP then scan TCP host from to threadsPerCPU else return ()
+        if scanUDP then scan UDP host from to threadsPerCPU else return ()
         if not (scanTCP || scanUDP) then putStrLn "No protocols selected" else return ()
