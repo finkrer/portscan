@@ -15,7 +15,7 @@ import Data.Char
 import Data.Bits
 import qualified Data.ByteString.Char8 as B8
 
-data Protocol = TCP | UDP deriving Show
+data Protocol = TCP | UDP deriving (Show, Eq)
 
 data ProtoName = NTP 
                | DNS
@@ -25,11 +25,11 @@ data ProtoName = NTP
                | HTTP
                | SSH
                | Unknown
-               deriving Show
+               deriving (Show, Eq)
 
 data Result = Reply ProtoName
             | NoReply
-            deriving Show
+            deriving (Show, Eq)
 
 withTimeout :: IO a -> IO (Maybe a)
 withTimeout = timeout $ 200 * 1000
@@ -59,7 +59,9 @@ check proto host port = withSocketsDo $ do
                 _       -> do
                             result <- getResult sock
                             close sock
-                            return result
+                            if result /= NoReply || proto == UDP
+                                then return result
+                                else return $ Reply Unknown
     where
         handler1 :: IOException -> IO [AddrInfo]
         handler1 err = return []
