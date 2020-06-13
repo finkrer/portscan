@@ -38,7 +38,7 @@ scan :: Protocol -> HostName -> Int -> Int -> Int -> IO ()
 scan proto host from to threads = do
     caps <- getNumCapabilities
     let length = to - from + 1
-    let cpus = caps * threads `min` length `min` 256
+    let cpus = (caps * threads) `min` length `min` 256
     let positions = [from,from+cpus..to]
     forConcurrently_ [0..cpus-1] (\thread ->
         forM_ positions (\pos ->
