@@ -96,11 +96,14 @@ getProtocol reply
     | B8.take 2 reply == B8.take 2 packet 
         && ord (B8.index reply 3) .&. 1 == 1
         = DNS
-    | ord (B8.index reply 0) .&. 7 == 4 
-        && ord (B8.index reply 0) `shift` (-3) .&. 7 == 3 
+    | mode == 4 
+        && version == 2 || version == 3 || version == 4 
         && B8.take 8 (B8.drop 24 reply) == B8.take 8 (B8.drop 40 packet)
         = NTP
     | otherwise = Unknown
+    where
+        mode = ord (B8.index reply 0) .&. 7
+        version = ord (B8.index reply 0) `shift` (-3) .&. 7
 
 displayResult :: Protocol -> Int -> Result -> IO ()
 displayResult proto port result =
