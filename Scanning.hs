@@ -71,7 +71,8 @@ check proto host port = withSocketsDo $ do
 packet :: B8.ByteString
 packet = B8.pack [chr 0x23] 
     `B8.append` B8.pack (replicate 39 (chr 0))
-    `B8.append` B8.pack (replicate 8 (chr 44))
+    `B8.append` B8.pack (replicate 7 (chr 44))
+    `B8.append` B8.pack [chr 10]
 
 getResult :: Socket -> IO Result
 getResult sock = do
@@ -79,7 +80,7 @@ getResult sock = do
     reply <- withTimeout $ recv sock 1024
     case reply of
         Nothing -> return NoReply
-        Just bstr -> return (Reply $ getProtocol bstr)
+        Just bstr -> (putStrLn $ show bstr) >> return (Reply $ getProtocol bstr)
 
 getProtocol :: B8.ByteString -> ProtoName
 getProtocol reply
