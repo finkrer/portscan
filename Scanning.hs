@@ -80,7 +80,7 @@ getResult sock = do
     reply <- withTimeout $ recv sock 1024
     case reply of
         Nothing -> return NoReply
-        Just bstr -> (putStrLn $ show bstr) >> return (Reply $ getProtocol bstr)
+        Just bstr -> return (Reply $ getProtocol bstr)
 
 getProtocol :: B8.ByteString -> ProtoName
 getProtocol reply
