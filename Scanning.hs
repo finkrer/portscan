@@ -77,10 +77,13 @@ packet = B8.pack [chr 0x23]
 getResult :: Socket -> IO Result
 getResult sock = do
     send sock packet
-    reply <- withTimeout $ recv sock 1024
+    reply <- catch (withTimeout $ recv sock 1024) handler
     case reply of
         Nothing -> return NoReply
         Just bstr -> return (Reply $ getProtocol bstr)
+    where
+        handler :: IOException -> IO (Maybe B8.ByteString)
+        handler err = return Nothing
 
 getProtocol :: B8.ByteString -> ProtoName
 getProtocol reply
