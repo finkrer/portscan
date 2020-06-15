@@ -2,6 +2,7 @@
 
 module Main where
 
+import Control.Monad
 import Arguments
 import Scanning
 
@@ -10,6 +11,6 @@ main = getArgs >>= run
 
 run :: Args -> IO ()
 run Args{..} = do
-        if scanTCP then scan TCP host from to threadsPerCPU else return ()
-        if scanUDP then scan UDP host from to threadsPerCPU else return ()
-        if not (scanTCP || scanUDP) then putStrLn "No protocols selected" else return ()
+        when scanTCP $ scan TCP host from to threadsPerCPU
+        when scanUDP $ scan UDP host from to threadsPerCPU
+        unless (scanTCP || scanUDP) $ putStrLn "No protocols selected"

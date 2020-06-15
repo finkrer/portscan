@@ -13,6 +13,7 @@ import Network.Socket.ByteString (send, recv)
 import System.Timeout
 import Data.Char
 import Data.Bits
+import Text.Printf
 import qualified Data.ByteString.Char8 as B8
 
 data Protocol = TCP | UDP deriving (Show, Eq)
@@ -27,42 +28,47 @@ data ProtoName = NTP
                | Unknown
                deriving (Show, Eq)
 
-data Result = Reply ProtoName
+data Result = Reply ProtoName Port
             | NoReply
             deriving (Show, Eq)
+
+type Port = Int
+type ThreadCount = Int
 
 withTimeout :: IO a -> IO (Maybe a)
 withTimeout = timeout $ 200 * 1000
 
-scan :: Protocol -> HostName -> Int -> Int -> Int -> IO ()
+scan :: Protocol -> HostName -> Port -> Port -> ThreadCount -> IO ()
 scan proto host from to threads = do
     caps <- getNumCapabilities
     let length = to - from + 1
-    let cpus = (caps * threads) `min` length `min` 256
+    let cpus = minimum [caps * threads, length, 256]
     let positions = [from,from+cpus..to]
     forConcurrently_ [0..cpus-1] (\thread ->
         forM_ positions (\pos ->
-            check proto host (pos+thread) >>= displayResult proto (pos+thread)))
+            displayPort $ pos + thread))
+            where
+                displayPort = check proto host >=> displayResult proto
 
-check :: Protocol -> HostName -> Int -> IO Result
+check :: Protocol -> HostName -> Port -> IO Result
 check proto host port = withSocketsDo $ do
     let sockType = case proto of
                     TCP -> Stream
                     UDP -> Datagram
-    addrInfo <- catch (getAddrInfo Nothing (Just host) (Just $ show port)) handler1
-    case addrInfo of
-        [] -> return NoReply
-        serverAddr:_ -> do
-            sock <- socket (addrFamily serverAddr) sockType defaultProtocol
-            connected <- catch (withTimeout $ connect sock (addrAddress serverAddr)) handler2
-            case connected of
-                Nothing -> close sock >> return NoReply
-                _       -> do
-                            result <- getResult sock
-                            close sock
-                            if result /= NoReply || proto == UDP
-                                then return result
-                                else return $ Reply Unknown
+    catch (getAddrInfo Nothing (Just host) (Just $ show port)) handler1 >>=
+        \case
+            [] -> return NoReply
+            serverAddr:_ -> do
+                sock <- socket (addrFamily serverAddr) sockType defaultProtocol
+                catch (withTimeout $ connect sock (addrAddress serverAddr)) handler2 >>=
+                    \case
+                        Nothing -> close sock >> return NoReply
+                        _       -> do
+                                    result <- getResult sock port
+                                    close sock
+                                    if result /= NoReply || proto == UDP
+                                        then return result
+                                        else return $ Reply Unknown port
     where
         handler1 :: IOException -> IO [AddrInfo]
         handler1 err = return []
@@ -70,18 +76,18 @@ check proto host port = withSocketsDo $ do
         handler2 err = return Nothing
 
 packet :: B8.ByteString
-packet = B8.pack [chr 0x23] 
-    `B8.append` B8.pack (replicate 39 (chr 0))
-    `B8.append` B8.pack (replicate 7 (chr 44))
-    `B8.append` B8.pack [chr 10]
+packet = B8.pack $ [chr 35]
+                ++ (replicate 39 (chr 0))
+                ++ (replicate 7 (chr 44))
+                ++ [chr 10]
 
-getResult :: Socket -> IO Result
-getResult sock = do
+getResult :: Socket -> Port -> IO Result
+getResult sock port = do
     send sock packet
-    reply <- catch (withTimeout $ recv sock 1024) handler
-    case reply of
-        Nothing -> return NoReply
-        Just bstr -> return (Reply $ getProtocol bstr)
+    catch (withTimeout $ recv sock 1024) handler >>=
+        \case
+            Nothing -> return NoReply
+            Just bstr -> return $ Reply (getProtocol bstr) port
     where
         handler :: IOException -> IO (Maybe B8.ByteString)
         handler err = return Nothing
@@ -93,24 +99,28 @@ getProtocol reply
     | B8.isInfixOf "SMTP" reply = SMTP
     | B8.isInfixOf "IMAP" reply = IMAP
     | B8.isInfixOf "POP3" reply = POP3
-    | B8.take 2 reply == B8.take 2 packet 
-        && ord (B8.index reply 3) .&. 1 == 1
+    | B8.length reply > 3
+        && slice 0 2 reply == slice 0 2 packet 
+        && charAt 3 reply .&. 1 == 1
         = DNS
-    | mode == 4 
+    | B8.length reply > 39
+        && mode == 4 
         && version == 2 || version == 3 || version == 4 
-        && B8.take 8 (B8.drop 24 reply) == B8.take 8 (B8.drop 40 packet)
+        && slice 24 32 reply == slice 40 48 packet
         = NTP
     | otherwise = Unknown
     where
-        mode = ord (B8.index reply 0) .&. 7
-        version = ord (B8.index reply 0) `shift` (-3) .&. 7
+        slice x y = B8.take (y-x) . B8.drop x
+        charAt n = ord . (flip B8.index) n
+        mode = charAt 0 reply .&. 7
+        version = charAt 0 reply `shift` (-3) .&. 7
 
-displayResult :: Protocol -> Int -> Result -> IO ()
-displayResult proto port result =
-    case result of
+displayResult :: Protocol -> Result -> IO ()
+displayResult proto =
+    \case
         NoReply -> return ()
-        Reply p -> putStrLn $ show proto ++ " " ++ show port ++ detectedProto
-            where detectedProto = case p of
+        Reply name port  -> putStrLn $ printf "%s %d %s" (show proto) port (display name)
+            where display = \case
                     Unknown -> ""
-                    _       -> " " ++ show p
+                    n       -> show n
                 

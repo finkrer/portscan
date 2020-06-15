@@ -3,14 +3,15 @@ module Arguments where
 import Options.Applicative
 import Data.Semigroup ((<>))
 import Network.Socket (HostName)
+import Scanning (Port, ThreadCount)
 
 data Args = Args
-  { host    :: HostName 
-  , from    :: Int
-  , to      :: Int
-  , scanTCP :: Bool
-  , scanUDP :: Bool
-  , threadsPerCPU :: Int }
+  { host          :: HostName 
+  , from          :: Port
+  , to            :: Port
+  , scanTCP       :: Bool
+  , scanUDP       :: Bool
+  , threadsPerCPU :: ThreadCount }
 
 args :: Parser Args
 args = Args
@@ -27,8 +28,8 @@ args = Args
         ( long "threads"
         <> metavar "N"
         <> help "Threads per CPU. High values may cause your machine to halt and catch fire."
-        <> value 32
-        <> showDefault )
+        <> showDefault
+        <> value 32 )
 
 opts :: ParserInfo Args
 opts = info (args <**> helper)
